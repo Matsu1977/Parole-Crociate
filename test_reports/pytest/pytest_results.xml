@@ -1,1 +1,36 @@
-<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="12" time="69.928" timestamp="2026-08-24T03:20:38.163097+00:00" hostname="agent-env-1efea674-f129-4c30-a37a-320b23039caf"><testcase classname="tests.test_rooms" name="test_create_room_instant" time="0.308" /><testcase classname="tests.test_rooms" name="test_create_room_empty_name_rejected" time="1.317" /><testcase classname="tests.test_rooms" name="test_puzzle_425_before_ready" time="0.160" /><testcase classname="tests.test_rooms" name="test_puzzle_becomes_ready_and_is_large" time="29.982" /><testcase classname="tests.test_rooms" name="test_join_room_second_player_terracotta" time="0.060" /><testcase classname="tests.test_rooms" name="test_join_room_full_rejected" time="0.059" /><testcase classname="tests.test_rooms" name="test_join_same_name_idempotent" time="0.053" /><testcase classname="tests.test_rooms" name="test_join_unknown_room_404" time="0.064" /><testcase classname="tests.test_rooms" name="test_state_and_cell_propagation" time="0.362" /><testcase classname="tests.test_rooms" name="test_cell_invalid_position_400" time="0.054" /><testcase classname="tests.test_rooms" name="test_focus_endpoint" time="0.054" /><testcase classname="tests.test_rooms" name="test_new_puzzle_instant_and_regenerates" time="37.375" /></testsuite></testsuites>
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="12" time="81.069" timestamp="2026-08-24T04:08:57.764576+00:00" hostname="agent-env-1efea674-f129-4c30-a37a-320b23039caf"><testcase classname="tests.test_rooms" name="test_create_room_instant" time="0.192" /><testcase classname="tests.test_rooms" name="test_create_room_empty_name_rejected" time="0.071" /><testcase classname="tests.test_rooms" name="test_puzzle_425_before_ready" time="0.713" /><testcase classname="tests.test_rooms" name="test_puzzle_becomes_ready_and_is_large" time="51.996"><failure message="KeyError: 'number'">session = &lt;requests.sessions.Session object at 0xf8d30c0b7850&gt;
+room = {'data': {'player': {'id': 'c59d7964-a259-47a3-8ac9-f538055296c3', 'name': 'Mamma', 'index': 0, 'color': '#354A5F', .....tus': 'generating', 'puzzle_ready': False, 'entries': {}, ...}}, 'code': 'DCFL', 'create_elapsed': 0.19084620475769043}
+
+    def test_puzzle_becomes_ready_and_is_large(session, room):
+        code = room["code"]
+        elapsed = _wait_puzzle_ready(session, code, timeout=75)
+        print(f"puzzle ready in {elapsed:.1f}s")
+        r = session.get(f"{API}/rooms/{code}/puzzle", timeout=15)
+        assert r.status_code == 200
+        puz = r.json()["puzzle"]
+        assert "solution" not in puz
+        for c in puz["across"] + puz["down"]:
+            assert "answer" not in c
+        total = len(puz["across"]) + len(puz["down"])
+        rows, cols = puz.get("rows"), puz.get("cols")
+        print(f"grid {rows}x{cols} with {total} defs ({len(puz['across'])} A / {len(puz['down'])} D)")
+        assert rows == 13 and cols == 13, f"expected 13x13 grid, got {rows}x{cols}"
+        assert 40 &lt;= total &lt;= 90, f"unexpected clue count: {total}"
+        # fully-checked verification: every filled cell participates in both across &amp; down
+        cells = puz["cells"]
+        filled = [(r, c) for r, row in enumerate(cells) for c, cell in enumerate(row) if cell]
+        assert len(filled) &gt; 100, f"too few filled cells: {len(filled)}"
+        # continuous numbering sanity
+&gt;       nums = sorted({c["number"] for c in puz["across"] + puz["down"]})
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+backend/tests/test_rooms.py:96: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+.0 = &lt;list_iterator object at 0xf8d30bc0f3d0&gt;
+
+&gt;   nums = sorted({c["number"] for c in puz["across"] + puz["down"]})
+                   ^^^^^^^^^^^
+E   KeyError: 'number'
+
+backend/tests/test_rooms.py:96: KeyError</failure></testcase><testcase classname="tests.test_rooms" name="test_join_room_second_player_terracotta" time="0.045" /><testcase classname="tests.test_rooms" name="test_join_room_full_rejected" time="0.045" /><testcase classname="tests.test_rooms" name="test_join_same_name_idempotent" time="0.047" /><testcase classname="tests.test_rooms" name="test_join_unknown_room_404" time="0.045" /><testcase classname="tests.test_rooms" name="test_state_and_cell_propagation" time="0.226" /><testcase classname="tests.test_rooms" name="test_cell_invalid_position_400" time="0.045" /><testcase classname="tests.test_rooms" name="test_focus_endpoint" time="0.048" /><testcase classname="tests.test_rooms" name="test_new_puzzle_instant_and_regenerates" time="27.489" /></testsuite></testsuites>

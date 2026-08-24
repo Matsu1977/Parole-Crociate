@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from datetime import datetime, timezone
 
 from crossword import build_crossword, build_from_fallback, FALLBACK_POOL
+from italian_crossword import build_italian_crossword
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -40,31 +41,31 @@ def gen_code():
 
 
 # ---------- Puzzle generation ----------
-async def generate_words(n=70):
+async def generate_clues(words):
+    """Return {WORD: clue} for the given Italian words via AI."""
+    result = {}
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
+        from crossword import normalize_word
 
         key = os.environ["EMERGENT_LLM_KEY"]
         chat = LlmChat(
             api_key=key,
             session_id=str(uuid.uuid4()),
             system_message=(
-                "Sei un enigmista italiano di altissimo livello. Crei parole e definizioni "
-                "raffinate, di difficolta' elevata, per cruciverba impegnativi stile Settimana Enigmistica."
+                "Sei un enigmista italiano di altissimo livello: scrivi definizioni da cruciverba "
+                "raffinate e impegnative, stile Settimana Enigmistica."
             ),
         ).with_model("anthropic", "claude-sonnet-4-6")
 
+        uniq = sorted(set(words))
         prompt = (
-            f"Genera esattamente {n} voci per un grande cruciverba italiano di ALTA DIFFICOLTA'.\n"
-            "Requisiti:\n"
-            "- Parole italiane singole, da 3 a 11 lettere, senza spazi, senza trattini, senza nomi propri.\n"
-            "- Mescola lunghezze diverse: includi molte parole corte (3-5 lettere) utili agli incroci "
-            "e diverse parole lunghe.\n"
-            "- Vocaboli ricercati, letterari, aulici o tecnici (non parole banali).\n"
-            "- Definizioni brevi, eleganti e stimolanti, in italiano, senza mai citare la parola.\n"
-            "- Nessuna parola ripetuta. Varia i campi semantici.\n"
-            'Rispondi ESCLUSIVAMENTE con un array JSON valido nel formato: '
-            '[{"word":"PAROLA","clue":"definizione"}]. Nessun testo prima o dopo.'
+            "Per OGNI parola italiana elencata scrivi UNA definizione da cruciverba di alta difficolta': "
+            "breve, elegante, in italiano, senza mai usare o citare la parola stessa ne' i suoi derivati.\n"
+            "Alcune possono essere forme flesse (plurali, voci verbali): definiscile comunque correttamente.\n"
+            "Parole: " + ", ".join(uniq) + "\n"
+            'Rispondi ESCLUSIVAMENTE con un oggetto JSON valido: {"PAROLA": "definizione", ...} '
+            "contenente TUTTE le parole. Nessun testo prima o dopo."
         )
         resp = await chat.send_message(UserMessage(text=prompt))
         text = resp if isinstance(resp, str) else str(resp)
@@ -73,30 +74,36 @@ async def generate_words(n=70):
             text = text.split("```")[1]
             if text.startswith("json"):
                 text = text[4:]
-        start = text.find("[")
-        end = text.rfind("]")
-        if start != -1 and end != -1:
-            text = text[start : end + 1]
+        s = text.find("{")
+        e = text.rfind("}")
+        if s != -1 and e != -1:
+            text = text[s : e + 1]
         data = json.loads(text)
-        out = [{"word": d["word"], "clue": d["clue"]} for d in data if d.get("word") and d.get("clue")]
-        if len(out) >= 20:
-            return out
-    except Exception as e:
-        logger.error(f"LLM word generation failed: {e}")
-    return None
+        for k, v in data.items():
+            nk = normalize_word(k)
+            if nk and v:
+                result[nk] = str(v).strip()
+    except Exception as ex:
+        logger.error(f"clue generation failed: {ex}")
+    return result
 
 
 async def make_puzzle():
-    words = await generate_words(70)
-    if words:
-        # blend fallback words to guarantee density and connectivity
-        pool = words + random.sample(FALLBACK_POOL, min(40, len(FALLBACK_POOL)))
-        random.shuffle(pool)
-        puz = build_crossword(pool, max_words=70, attempts=12)
-        if puz and (len(puz["across"]) + len(puz["down"])) >= 30:
-            return puz
-    logger.info("Using fallback puzzle pool")
-    return build_from_fallback()
+    loop = asyncio.get_event_loop()
+    puz = None
+    for _ in range(2):
+        puz = await loop.run_in_executor(None, build_italian_crossword)
+        if puz:
+            break
+    if not puz:
+        logger.error("classic crossword build failed; using sparse fallback")
+        return build_from_fallback()
+
+    words = [e["answer"] for e in puz["across"]] + [e["answer"] for e in puz["down"]]
+    clues = await generate_clues(words)
+    for e in puz["across"] + puz["down"]:
+        e["clue"] = clues.get(e["answer"]) or f"Vocabolo di {e['length']} lettere"
+    return puz
 
 
 async def generate_and_store(code):
@@ -111,8 +118,11 @@ async def generate_and_store(code):
 
 
 def public_puzzle(puzzle):
+    rows = puzzle.get("rows", puzzle.get("size"))
+    cols = puzzle.get("cols", puzzle.get("size"))
     return {
-        "size": puzzle["size"],
+        "rows": rows,
+        "cols": cols,
         "cells": puzzle["cells"],
         "across": [{k: v for k, v in c.items() if k != "answer"} for c in puzzle["across"]],
         "down": [{k: v for k, v in c.items() if k != "answer"} for c in puzzle["down"]],

@@ -14,19 +14,20 @@ export default function CrosswordGrid({
   onCellClick,
   poppedKey,
 }) {
-  const size = puzzle.size;
-  const GW = "min(92vw, 680px)";
-  const letterSize = `calc(${GW} / ${size} * 0.56)`;
-  const numberSize = `calc(${GW} / ${size} * 0.26)`;
+  const rows = puzzle.rows;
+  const cols = puzzle.cols;
+  const GW = "min(94vw, 720px)";
+  const letterSize = `calc(${GW} / ${cols} * 0.56)`;
+  const numberSize = `calc(${GW} / ${cols} * 0.26)`;
   const cells = useMemo(() => {
-    const rows = [];
-    for (let r = 0; r < size; r++) {
+    const rws = [];
+    for (let r = 0; r < rows; r++) {
       const row = [];
-      for (let c = 0; c < size; c++) row.push(`${r}-${c}`);
-      rows.push(row);
+      for (let c = 0; c < cols; c++) row.push(`${r}-${c}`);
+      rws.push(row);
     }
-    return rows;
-  }, [size]);
+    return rws;
+  }, [rows, cols]);
 
   return (
     <div
@@ -36,7 +37,7 @@ export default function CrosswordGrid({
     >
       <div
         className="grid gap-[1px] bg-[#2c2a29] p-[1px] rounded-sm"
-        style={{ gridTemplateColumns: `repeat(${size}, 1fr)` }}
+        style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}
       >
         {cells.flat().map((key) => {
           const [r, c] = key.split("-").map(Number);

@@ -84,10 +84,20 @@ def test_puzzle_becomes_ready_and_is_large(session, room):
     for c in puz["across"] + puz["down"]:
         assert "answer" not in c
     total = len(puz["across"]) + len(puz["down"])
-    print(f"grid size {puz['size']} with {total} defs ({len(puz['across'])} A / {len(puz['down'])} D)")
-    # LARGE requirement: ~25-33 size and ~50-70 defs
-    assert puz["size"] >= 18, f"grid too small: {puz['size']}"
-    assert total >= 40, f"too few clues: {total}"
+    rows, cols = puz.get("rows"), puz.get("cols")
+    print(f"grid {rows}x{cols} with {total} defs ({len(puz['across'])} A / {len(puz['down'])} D)")
+    assert rows == 13 and cols == 13, f"expected 13x13 grid, got {rows}x{cols}"
+    assert 40 <= total <= 90, f"unexpected clue count: {total}"
+    # fully-checked verification: every filled cell participates in both across & down
+    cells = puz["cells"]
+    filled = [(r, c) for r, row in enumerate(cells) for c, cell in enumerate(row) if cell]
+    assert len(filled) > 100, f"too few filled cells: {len(filled)}"
+    # continuous numbering sanity
+    nums = sorted({c["num"] for c in puz["across"] + puz["down"]})
+    assert nums[0] == 1
+    # every clue has non-empty italian text
+    for c in puz["across"] + puz["down"]:
+        assert c.get("clue", "").strip(), f"empty clue at {c.get('number')}"
 
 
 # ---- Join ----

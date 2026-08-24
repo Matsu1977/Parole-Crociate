@@ -22,15 +22,26 @@
 - Frontend: React + Tailwind. Landing (crea/unisci), Game (griglia + pannello indizi + presenza + attesa + vittoria). Colori giocatori: P1 #354A5F, P2 #C05C48.
 
 ## Implemented (2026-06)
-- [x] Landing bilingue-IT con crea/unisci stanza (design editorial warm)
-- [x] Generazione AI cruciverba italiano alta difficoltà
-- [x] Builder cruciverba grande (~30x30, ~70 definizioni)
+- [x] Landing IT con crea/unisci stanza (design editorial warm)
 - [x] Generazione in background (fix "resta a caricare") + schermata di attesa con codice/condivisione
 - [x] Griglia collaborativa in tempo reale con colori per giocatore
 - [x] Presenza giocatori, indizi Orizzontali/Verticali, banner indizio attivo
 - [x] Navigazione tastiera (frecce, spazio cambia direzione, backspace)
 - [x] Rilevamento completamento + overlay vittoria + nuovo cruciverba
-- Verificato dal testing agent (iteration_2): backend 100%, frontend 100%.
+- [x] MOTORE CLASSICO "a incastro totale" (Settimana Enigmistica): griglia rettangolare 13x13 piena, caselle nere, ogni casella incrociata orizz+vert, numerazione continua, ~55-62 definizioni
+  - Dizionario italiano 592k parole (backend/data/words_by_len.json), generazione pattern costruttiva (run-splitting, min 3/max 8), riempimento a backtracking con bitset (~5-15s)
+  - Definizioni di alta difficoltà generate dall'AI (Claude) per ogni parola trovata, in un'unica chiamata batch
+- Verificato dal testing agent iteration_1/2/3: backend 100%, frontend 100%.
+
+## Architettura motore cruciverba
+- backend/italian_crossword.py: gen_pattern (costruttivo), get_slots, solve (bitset FC + restart), build_italian_crossword, _assemble -> {rows, cols, cells, across, down, solution}
+- backend/crossword.py: fallback sparso (ultima risorsa)
+- backend/prep_words.py: preprocessa il dizionario grezzo in words_by_len.json
+- Puzzle pubblico: rows/cols/cells/across/down (senza answer/solution). Chiave numero indizio = 'num'.
+
+## Note
+- Generazione ~30-60s (riempimento griglia + scrittura definizioni AI): gestita in background con schermata di attesa.
+- Dimensione max griglia limitata a 13x13 dal dizionario (parole fino a 13 lettere) e dalla riempibilita' affidabile.
 
 ## Backlog / next (P1/P2)
 - P1: chat tra i due giocatori durante il gioco

@@ -248,7 +248,7 @@ export default function Game() {
     if (!selected) return;
     let r = selected.row + dr;
     let c = selected.col + dc;
-    while (r >= 0 && c >= 0 && r < puzzle.size && c < puzzle.size) {
+    while (r >= 0 && c >= 0 && r < puzzle.rows && c < puzzle.cols) {
       if (cellSet.has(key(r, c))) {
         selectCell(r, c, dr !== 0 ? "down" : "across");
         return;
