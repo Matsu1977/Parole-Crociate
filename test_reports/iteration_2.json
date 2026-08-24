@@ -1,0 +1,26 @@
+{
+  "summary": "Re-tested Cruciverba Insieme after refactor to BACKGROUND puzzle generation. Backend: 12/12 pytest cases PASS (create returns in <1s with status='generating' and no puzzle inline; /puzzle returns 425 while generating; puzzle becomes ready in ~35s with SIZE=32 and 70 clues (35 A / 35 D); join no longer returns puzzle inline; new-puzzle endpoint returns instantly with status='generating' and regenerates in background). Frontend E2E via Playwright on the public URL: Landing 'Crea e gioca' -> instant navigation to /stanza/GSUP in 0.13s -> waiting screen shows 'Sto componendo il cruciverba', the big room code GSUP, 'Copia il link e invitala' (data-testid share-button), and presence bubble for Mamma. After 37.5s the crossword-grid replaced the waiting screen automatically. Grid is 680x680 with 34 Orizzontali + 36 Verticali = 70 clues visible. Clue interaction verified: clicking clue-across-* -> active-clue-banner shows 'N Oriz. ...'; clicking clue-down-* -> banner switches to 'N Vert. ...'. Hidden input typing works; cell numbers scale and remain readable on the dense grid. No hangs, no console errors, no broken layout. User's reported 'stays loading' bug is fixed by the background-generation architecture.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_rooms.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py generate_and_store: if the room is deleted between request and finish, the update_one silently no-ops (upsert=False). Fine but worth logging.",
+    "server.py: no TTL on rooms collection; unbounded growth. Consider a TTL index on created_at.",
+    "server.py new_puzzle: does not verify the caller is one of the two players; anyone with the code can reset the puzzle. Acceptable for no-auth MVP but easy to add player_id check.",
+    "crossword.py build_from_fallback recursion + attempts is CPU heavy on hot path but runs in a background task so it doesn't block requests.",
+    "Game.jsx startNew clears local state before the server confirms; if newPuzzle POST fails, UI is left in 'generating' with no recovery except manual refresh. Toast is shown but state could be restored.",
+    "No rate limiting on /rooms create, /cell, /focus - could be spammed.",
+    "Frontend polls every 1200ms during waiting AND playing; consider WebSocket for scale."
+  ],
+  "updated_files": ["/app/backend/tests/test_rooms.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "No auth. Ephemeral room code GSUP used during frontend test.",
+  "seed_data_creation": "None; tests create their own rooms.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend test file /app/backend/tests/test_rooms.py now covers async generation model: instant create (<5s), 425 while generating, poll until puzzle_ready via /state, then fetch /puzzle. Puzzle observed at size=32 with 70 defs, generated in ~35s using Anthropic key + fallback blending. Use `pytest backend/tests/test_rooms.py -v -o addopts=\"\"` to bypass the xdist config in /app/backend/pytest.ini. Frontend Landing: tab-crea is a tab (not the submit); submit button label is 'Crea e gioca'. Waiting screen and playing screen both expose data-testid=share-button and data-testid=presence. Grid cells scale via CSS calc, verified readable at 32x32."
+}

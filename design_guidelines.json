@@ -1,0 +1,138 @@
+{
+  "theme": "light",
+  "design_archetype": "Organic & Earthy / Editorial Luxury",
+  "core_concept": "An intimate, sophisticated two-player crossword experience connecting Italy and Japan. The UI uses warm paper textures, editorial typography, and clear, distinct player colors to create a cozy, collaborative environment. The layout is structured and grid-forward, maximizing the puzzle space while maintaining elegance.",
+  "typography": {
+    "headings": {
+      "font_family": "Cormorant Garamond",
+      "weights": ["400", "600"],
+      "usage": "Headers, landing page title, victory screens. Gives an editorial, classic newspaper feel.",
+      "classes": "font-serif tracking-tight text-[#2C2A29]"
+    },
+    "body": {
+      "font_family": "Outfit",
+      "weights": ["300", "400", "500"],
+      "usage": "UI elements, clue lists, buttons, room codes.",
+      "classes": "font-sans text-[#5C5856] leading-relaxed"
+    },
+    "mono": {
+      "font_family": "JetBrains Mono",
+      "weights": ["400", "500"],
+      "usage": "Grid cell letters, cell numbers, room codes.",
+      "classes": "font-mono tracking-tighter"
+    }
+  },
+  "colors": {
+    "backgrounds": {
+      "primary": "#F9F6F0",
+      "secondary": "#EAE4D9",
+      "paper": "#FFFFFF",
+      "overlay": "rgba(44, 42, 41, 0.4)"
+    },
+    "text": {
+      "primary": "#2C2A29",
+      "secondary": "#5C5856",
+      "muted": "#8A8481"
+    },
+    "borders": {
+      "grid": "#2C2A29",
+      "ui": "#D6CEC2"
+    },
+    "players": {
+      "player_1": {
+        "name": "Son (Japan Focus)",
+        "color": "#354A5F",
+        "bg_highlight": "rgba(53, 74, 95, 0.15)"
+      },
+      "player_2": {
+        "name": "Mother (Italy Focus)",
+        "color": "#C05C48",
+        "bg_highlight": "rgba(192, 92, 72, 0.15)"
+      }
+    },
+    "gameplay": {
+      "active_word_bg": "#EAE4D9",
+      "active_cell_bg": "#DCD4C4",
+      "correct_flash": "#4A6657"
+    }
+  },
+  "layouts": {
+    "landing_screen": {
+      "structure": "Split screen or centered card on a warm paper background. Left/Top: Emotional hero image and classic serif title ('Cruciverba Insieme'). Right/Bottom: Elegant join form.",
+      "spacing": "Generous padding (p-12 to p-24).",
+      "components": "Shadcn inputs (customized with warm borders, no default blue focus rings), pill-shaped submit buttons."
+    },
+    "game_screen": {
+      "desktop": "Two-column bento-style layout. Left column (grid-cols-8): The crossword grid, centered with breathing room. Right column (grid-cols-4): Sticky clue panel split into 'Orizzontali' (Across) and 'Verticali' (Down), plus header with player presence.",
+      "mobile": "Mobile-first vertical stack. Top sticky header (player presence). Middle: The crossword grid (zoomable/pannable or perfectly sized). Bottom: Floating active clue, with a drawer or scrollable list for all clues.",
+      "navigation": "Header must have a solid background (bg-[#F9F6F0]) with bottom border. No transparent headers."
+    }
+  },
+  "components_strategy": {
+    "crossword_grid": {
+      "type": "Custom HTML/Tailwind",
+      "rules": [
+        "Use CSS Grid for the board. Aspect ratio must be square.",
+        "Cells: white background, 1px solid border-grid.",
+        "Black cells: bg-[#2C2A29].",
+        "Numbers: Absolute positioned top-left, text-[0.5rem] JetBrains Mono.",
+        "Letters: Centered, uppercase, text-xl to text-2xl JetBrains Mono.",
+        "Focus state: Must use the specific player's color for border and a subtle background tint.",
+        "Presence: Show a small colored dot or triangle in the top-right corner of the cell the other player is currently focused on."
+      ]
+    },
+    "clue_list": {
+      "type": "Shadcn ScrollArea + Custom List",
+      "rules": [
+        "Use Outfit for readability.",
+        "Active clue gets a left border highlight matching the active player's color and a subtle background tint.",
+        "Hover state on clues should subtly highlight the corresponding cells in the grid."
+      ]
+    },
+    "forms_and_inputs": {
+      "type": "Shadcn (Customized)",
+      "rules": [
+        "Remove default Vercel/Stripe look.",
+        "Inputs: bg-transparent, border-b-2 (or full rounded border with 1px border-[#D6CEC2]).",
+        "Buttons: Pill-shaped, bg-[#2C2A29] text-white, hover:bg-[#5C5856]."
+      ]
+    }
+  },
+  "motion_and_interactions": {
+    "micro_interactions": [
+      "Cell input: Subtle pop (scale 1.1 to 1.0) when a letter is typed.",
+      "Clue switch: Smooth scroll within the clue list when moving to a new word on the grid.",
+      "Player join: Avatar slides in from the top right with a subtle spring animation."
+    ],
+    "transitions": "Use specific transition properties (e.g., transition-colors, transition-transform), never 'transition: all'."
+  },
+  "images_and_assets": {
+    "hero_background": {
+      "url": "https://images.unsplash.com/photo-1501843508755-af0829d48618?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2OTF8MHwxfHNlYXJjaHw0fHxjb3p5JTIwY29mZmVlJTIwY3VwJTIwd29vZGVuJTIwdGFibGUlMjBhZXN0aGV0aWN8ZW58MHx8fHwxNzg2NjQ0ODI3fDA&ixlib=rb-4.1.0&q=85",
+      "description": "White ceramic mug with coffee on a wooden table, used for landing page hero or welcome screen to set a warm, cozy Italian/morning vibe."
+    },
+    "texture_overlay": {
+      "url": "https://images.unsplash.com/photo-1603484477859-abe6a73f9366?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzd8MHwxfHNlYXJjaHwzfHx3YXJtJTIwdGV4dHVyZWQlMjBwYXBlciUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzg2NjQ0ODI3fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Crumpled beige parchment paper. Use as a very low opacity (5-10%) mix-blend-multiply background overlay for the app surface to kill the 'digital flatness'."
+    }
+  },
+  "accessibility_and_testing": {
+    "contrast": "Ensure all text, especially clues and grid letters, meets APCA/WCAG AA contrast against the warm backgrounds. Do not use pure gray; tint grays with warmth.",
+    "keyboard_nav": "Full arrow-key navigation within the grid. Pressing space or clicking toggles Across/Down direction.",
+    "test_ids": "MANDATORY: Add data-testid to all interactive elements. Examples: data-testid='room-code-input', data-testid='join-button', data-testid='grid-cell-0-0', data-testid='clue-across-1'."
+  },
+  "instructions_to_main_agent": [
+    "Install required fonts from Google Fonts: Cormorant Garamond, Outfit, JetBrains Mono.",
+    "Implement the UI exclusively in Italian as requested.",
+    "For the real-time presence, simulate or implement logic so Player 1 and Player 2 have distinct cursor/cell colors (Slate/Indigo for P1, Terracotta for P2).",
+    "Use Lucide-react for icons (e.g., users, share, check, arrow-right).",
+    "DO NOT use generic centered box layouts for the game screen. Use the full viewport elegantly.",
+    "DO NOT use 'transition: all'.",
+    "Ensure the header background is solid (bg-[#F9F6F0]), not transparent."
+  ],
+  "universal_guidelines": {
+    "spacing": "Use 2x-3x more spacing than typical defaults (p-6, p-8, p-12).",
+    "borders": "Use subtle colored borders (1px) rather than heavy drop shadows to create depth in the flat editorial style.",
+    "interactions": "Ensure every button and interactive element has explicit hover and focus states with adequate contrast."
+  }
+}
