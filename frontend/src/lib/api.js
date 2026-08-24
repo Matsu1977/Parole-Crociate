@@ -4,7 +4,8 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 export const api = axios.create({ baseURL: API });
 
-export const createRoom = (name) => api.post("/rooms", { name }).then((r) => r.data);
+export const createRoom = (name, difficulty) =>
+  api.post("/rooms", { name, difficulty }).then((r) => r.data);
 export const joinRoom = (code, name) => api.post(`/rooms/${code}/join`, { name }).then((r) => r.data);
 export const getPuzzle = (code) => api.get(`/rooms/${code}/puzzle`).then((r) => r.data);
 export const getState = (code, playerId) =>

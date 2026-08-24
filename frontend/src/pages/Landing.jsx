@@ -12,6 +12,7 @@ export default function Landing() {
   const [mode, setMode] = useState("crea");
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
+  const [difficulty, setDifficulty] = useState("alta");
   const [loading, setLoading] = useState(false);
 
   const go = async () => {
@@ -22,7 +23,7 @@ export default function Landing() {
     setLoading(true);
     try {
       if (mode === "crea") {
-        const data = await createRoom(name.trim());
+        const data = await createRoom(name.trim(), difficulty);
         sessionStorage.setItem(`cw_name_${data.state.code}`, name.trim());
         nav(`/stanza/${data.state.code}`);
       } else {
@@ -125,6 +126,42 @@ export default function Landing() {
                 className="w-full bg-transparent border-b-2 border-[#d6cec2] focus:border-[#c05c48] outline-none py-2 text-lg text-[#2c2a29] transition-colors"
               />
             </div>
+
+            {mode === "crea" && (
+              <div>
+                <label className="block font-mono text-[0.7rem] tracking-widest uppercase text-[#8a8481] mb-3">
+                  Livello di difficoltà
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { k: "media", label: "Media", desc: "Accessibile" },
+                    { k: "alta", label: "Alta", desc: "Ricercata" },
+                    { k: "altissima", label: "Altissima", desc: "Criptica" },
+                  ].map((d) => (
+                    <button
+                      key={d.k}
+                      type="button"
+                      data-testid={`difficulty-${d.k}`}
+                      onClick={() => setDifficulty(d.k)}
+                      className={`flex flex-col items-start rounded-lg border px-3 py-2.5 transition-colors ${
+                        difficulty === d.k
+                          ? "border-[#c05c48] bg-[#c05c48]/10"
+                          : "border-[#d6cec2] hover:border-[#8a8481]"
+                      }`}
+                    >
+                      <span
+                        className={`text-sm ${
+                          difficulty === d.k ? "text-[#2c2a29]" : "text-[#5c5856]"
+                        }`}
+                      >
+                        {d.label}
+                      </span>
+                      <span className="text-[0.65rem] text-[#8a8481]">{d.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {mode === "unisci" && (
               <div>

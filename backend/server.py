@@ -41,9 +41,26 @@ def gen_code():
 
 
 # ---------- Puzzle generation ----------
-async def generate_clues(words):
+DIFFICULTY_PROMPTS = {
+    "media": (
+        "di difficolta' MEDIA: definizioni chiare, dirette e comprensibili, "
+        "con qualche piccola sfida ma senza tranelli"
+    ),
+    "alta": (
+        "di difficolta' ALTA: definizioni ricercate, eleganti e stimolanti, "
+        "con vocabolario elevato"
+    ),
+    "altissima": (
+        "di difficolta' ALTISSIMA: definizioni criptiche e allusive, con doppi sensi, "
+        "metafore e giochi di parole, molto impegnative da decifrare"
+    ),
+}
+
+
+async def generate_clues(words, difficulty="alta"):
     """Return {WORD: clue} for the given Italian words via AI."""
     result = {}
+    diff_text = DIFFICULTY_PROMPTS.get(difficulty, DIFFICULTY_PROMPTS["alta"])
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
         from crossword import normalize_word
@@ -54,14 +71,14 @@ async def generate_clues(words):
             session_id=str(uuid.uuid4()),
             system_message=(
                 "Sei un enigmista italiano di altissimo livello: scrivi definizioni da cruciverba "
-                "raffinate e impegnative, stile Settimana Enigmistica."
+                "raffinate, stile Settimana Enigmistica."
             ),
         ).with_model("anthropic", "claude-sonnet-4-6")
 
         uniq = sorted(set(words))
         prompt = (
-            "Per OGNI parola italiana elencata scrivi UNA definizione da cruciverba di alta difficolta': "
-            "breve, elegante, in italiano, senza mai usare o citare la parola stessa ne' i suoi derivati.\n"
+            f"Per OGNI parola italiana elencata scrivi UNA definizione da cruciverba {diff_text}: "
+            "breve, in italiano, senza mai usare o citare la parola stessa ne' i suoi derivati.\n"
             "Alcune possono essere forme flesse (plurali, voci verbali): definiscile comunque correttamente.\n"
             "Parole: " + ", ".join(uniq) + "\n"
             'Rispondi ESCLUSIVAMENTE con un oggetto JSON valido: {"PAROLA": "definizione", ...} '
@@ -88,7 +105,7 @@ async def generate_clues(words):
     return result
 
 
-async def make_puzzle():
+async def make_puzzle(difficulty="alta"):
     loop = asyncio.get_event_loop()
     puz = None
     for _ in range(2):
@@ -100,15 +117,17 @@ async def make_puzzle():
         return build_from_fallback()
 
     words = [e["answer"] for e in puz["across"]] + [e["answer"] for e in puz["down"]]
-    clues = await generate_clues(words)
+    clues = await generate_clues(words, difficulty)
     for e in puz["across"] + puz["down"]:
         e["clue"] = clues.get(e["answer"]) or f"Vocabolo di {e['length']} lettere"
     return puz
 
 
 async def generate_and_store(code):
+    room = await db.rooms.find_one({"code": code})
+    difficulty = (room or {}).get("difficulty", "alta")
     try:
-        puzzle = await make_puzzle()
+        puzzle = await make_puzzle(difficulty)
     except Exception as e:
         logger.error(f"generation failed for {code}: {e}")
         puzzle = build_from_fallback()
@@ -146,6 +165,7 @@ def room_state(room, player_id=None):
         "code": room["code"],
         "status": room.get("status", "playing"),
         "puzzle_ready": room.get("puzzle") is not None,
+        "difficulty": room.get("difficulty", "alta"),
         "entries": room.get("entries", {}),
         "players": players,
     }
@@ -154,6 +174,11 @@ def room_state(room, player_id=None):
 # ---------- Models ----------
 class JoinBody(BaseModel):
     name: str
+
+
+class CreateBody(BaseModel):
+    name: str
+    difficulty: str = "alta"
 
 
 class CellBody(BaseModel):
@@ -177,10 +202,11 @@ async def root():
 
 
 @api_router.post("/rooms")
-async def create_room(body: JoinBody):
+async def create_room(body: CreateBody):
     name = body.name.strip()
     if not name:
         raise HTTPException(400, "Nome richiesto")
+    difficulty = body.difficulty if body.difficulty in DIFFICULTY_PROMPTS else "alta"
     code = gen_code()
     while await db.rooms.find_one({"code": code}):
         code = gen_code()
@@ -198,6 +224,7 @@ async def create_room(body: JoinBody):
         "entries": {},
         "players": [player],
         "status": "generating",
+        "difficulty": difficulty,
         "created_at": now_iso(),
     }
     await db.rooms.insert_one(room)

@@ -17,6 +17,7 @@ export default function Game() {
   const [entries, setEntries] = useState({});
   const [players, setPlayers] = useState([]);
   const [status, setStatus] = useState("playing");
+  const [difficulty, setDifficulty] = useState("alta");
   const [selected, setSelected] = useState(null);
   const [direction, setDirection] = useState("across");
   const [poppedKey, setPoppedKey] = useState(null);
@@ -115,6 +116,7 @@ export default function Game() {
         setPlayers(data.state.players || []);
         setEntries(data.state.entries || {});
         setStatus(data.state.status);
+        setDifficulty(data.state.difficulty || "alta");
         if (data.state.puzzle_ready) {
           await loadPuzzle();
         }
@@ -427,6 +429,12 @@ export default function Game() {
           </button>
 
           <div className="flex items-center gap-3 sm:gap-5">
+            <span
+              data-testid="difficulty-badge"
+              className="hidden sm:inline-flex items-center rounded-full border border-[#d6cec2] px-3 py-1 text-[0.7rem] font-mono tracking-widest uppercase text-[#8a8481]"
+            >
+              {difficulty}
+            </span>
             <div className="flex items-center gap-3" data-testid="presence">
               {players.map((p) => (
                 <div key={p.id} className="flex items-center gap-1.5" title={p.name}>
