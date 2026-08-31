@@ -105,22 +105,36 @@ export default function Game() {
   useEffect(() => {
     const name = sessionStorage.getItem(`cw_name_${code}`);
     if (!name) {
-      nav("/");
+      nav(`/?code=${encodeURIComponent(code)}`, { replace: true });
       return;
     }
+
+    let savedPlayer = null;
+    try {
+      const saved = sessionStorage.getItem(`cw_player_${code}`);
+      if (saved) savedPlayer = JSON.parse(saved);
+    } catch {
+      sessionStorage.removeItem(`cw_player_${code}`);
+    }
+
     let cancelled = false;
     (async () => {
       try {
-        const data = await joinRoom(code, name);
+        let data;
+        if (savedPlayer?.id) {
+          const state = await getState(code, savedPlayer.id);
+          data = { player: savedPlayer, state };
+        } else {
+          data = await joinRoom(code, name);
+          sessionStorage.setItem(`cw_player_${code}`, JSON.stringify(data.player));
+        }
         if (cancelled) return;
         setPlayer(data.player);
         setPlayers(data.state.players || []);
         setEntries(data.state.entries || {});
         setStatus(data.state.status);
         setDifficulty(data.state.difficulty || "alta");
-        if (data.state.puzzle_ready) {
-          await loadPuzzle();
-        }
+        if (data.state.puzzle_ready) await loadPuzzle();
       } catch (e) {
         toast.error(e?.response?.data?.detail || "Impossibile entrare nella stanza");
         nav("/");
@@ -128,11 +142,8 @@ export default function Game() {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [code, nav]);
-
+    return () => { cancelled = true; };
+  }, [code, nav, loadPuzzle]);
   // ---- polling ----
   useEffect(() => {
     if (!player) return;

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Loader2, ArrowRight, Users, PenLine } from "lucide-react";
 import { createRoom, joinRoom } from "@/lib/api";
@@ -9,9 +9,11 @@ const HERO =
 
 export default function Landing() {
   const nav = useNavigate();
-  const [mode, setMode] = useState("crea");
+  const [searchParams] = useSearchParams();
+  const sharedCode = searchParams.get("code")?.trim().toUpperCase() || "";
+  const [mode, setMode] = useState(sharedCode ? "unisci" : "crea");
   const [name, setName] = useState("");
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(sharedCode);
   const [difficulty, setDifficulty] = useState("alta");
   const [loading, setLoading] = useState(false);
 
@@ -25,6 +27,9 @@ export default function Landing() {
       if (mode === "crea") {
         const data = await createRoom(name.trim(), difficulty);
         sessionStorage.setItem(`cw_name_${data.state.code}`, name.trim());
+        if (data.player) {
+          sessionStorage.setItem(`cw_player_${data.state.code}`, JSON.stringify(data.player));
+        }
         nav(`/stanza/${data.state.code}`);
       } else {
         const c = code.trim().toUpperCase();
@@ -35,6 +40,7 @@ export default function Landing() {
         }
         const data = await joinRoom(c, name.trim());
         sessionStorage.setItem(`cw_name_${c}`, name.trim());
+        sessionStorage.setItem(`cw_player_${c}`, JSON.stringify(data.player));
         nav(`/stanza/${c}`);
       }
     } catch (e) {

@@ -57,53 +57,18 @@ DIFFICULTY_PROMPTS = {
 }
 
 
-async def generate_clues(words, difficulty="alta"):
-    """Return {WORD: clue} for the given Italian words via AI."""
-    result = {}
-    diff_text = DIFFICULTY_PROMPTS.get(difficulty, DIFFICULTY_PROMPTS["alta"])
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        from crossword import normalize_word
+_CLUES = None
 
-        key = os.environ["EMERGENT_LLM_KEY"]
-        chat = LlmChat(
-            api_key=key,
-            session_id=str(uuid.uuid4()),
-            system_message=(
-                "Sei un enigmista italiano di altissimo livello: scrivi definizioni da cruciverba "
-                "raffinate, stile Settimana Enigmistica."
-            ),
-        ).with_model("anthropic", "claude-sonnet-4-6")
 
-        uniq = sorted(set(words))
-        prompt = (
-            f"Per OGNI parola italiana elencata scrivi UNA definizione da cruciverba {diff_text}: "
-            "breve, in italiano, senza mai usare o citare la parola stessa ne' i suoi derivati.\n"
-            "Alcune possono essere forme flesse (plurali, voci verbali): definiscile comunque correttamente.\n"
-            "Parole: " + ", ".join(uniq) + "\n"
-            'Rispondi ESCLUSIVAMENTE con un oggetto JSON valido: {"PAROLA": "definizione", ...} '
-            "contenente TUTTE le parole. Nessun testo prima o dopo."
-        )
-        resp = await chat.send_message(UserMessage(text=prompt))
-        text = resp if isinstance(resp, str) else str(resp)
-        text = text.strip()
-        if "```" in text:
-            text = text.split("```")[1]
-            if text.startswith("json"):
-                text = text[4:]
-        s = text.find("{")
-        e = text.rfind("}")
-        if s != -1 and e != -1:
-            text = text[s : e + 1]
-        data = json.loads(text)
-        for k, v in data.items():
-            nk = normalize_word(k)
-            if nk and v:
-                result[nk] = str(v).strip()
-    except Exception as ex:
-        logger.error(f"clue generation failed: {ex}")
-    return result
-
+def load_clues():
+    """Load the local Italian WordNet definitions once per server process."""
+    global _CLUES
+    if _CLUES is None:
+        clue_path = ROOT_DIR / "data" / "clues_by_word.json"
+        with open(clue_path, encoding="utf-8") as file:
+            _CLUES = json.load(file)
+        logger.info("Loaded %s local crossword definitions", len(_CLUES))
+    return _CLUES
 
 async def make_puzzle(difficulty="alta"):
     loop = asyncio.get_event_loop()
@@ -116,10 +81,9 @@ async def make_puzzle(difficulty="alta"):
         logger.error("classic crossword build failed; using sparse fallback")
         return build_from_fallback()
 
-    words = [e["answer"] for e in puz["across"]] + [e["answer"] for e in puz["down"]]
-    clues = await generate_clues(words, difficulty)
+    clues = load_clues()
     for e in puz["across"] + puz["down"]:
-        e["clue"] = clues.get(e["answer"]) or f"Vocabolo di {e['length']} lettere"
+        e["clue"] = clues.get(e["answer"]) or "Definizione non disponibile"
     return puz
 
 
