@@ -196,3 +196,36 @@ def test_new_puzzle_instant_and_regenerates(session, room):
     _wait_puzzle_ready(session, code, timeout=75)
     r = session.get(f"{API}/rooms/{code}/puzzle", timeout=15).json()
     assert "puzzle" in r
+
+
+
+# ---- Difficulty regression ----
+def test_create_room_with_difficulty_media(session):
+    r = session.post(f"{API}/rooms", json={"name": "MediaP", "difficulty": "media"}, timeout=15)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["state"]["difficulty"] == "media"
+    code = data["state"]["code"]
+    assert len(code) == 4 and code.isupper() and code.isalpha()
+    st = session.get(f"{API}/rooms/{code}/state", timeout=15).json()
+    assert st["difficulty"] == "media"
+
+
+def test_create_room_with_difficulty_altissima(session):
+    r = session.post(f"{API}/rooms", json={"name": "AltP", "difficulty": "altissima"}, timeout=15)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["state"]["difficulty"] == "altissima"
+
+
+def test_create_room_invalid_difficulty_defaults(session):
+    r = session.post(f"{API}/rooms", json={"name": "Foo", "difficulty": "bogus"}, timeout=15)
+    assert r.status_code == 200
+    # invalid falls back to "alta"
+    assert r.json()["state"]["difficulty"] == "alta"
+
+
+def test_create_room_default_difficulty(session):
+    r = session.post(f"{API}/rooms", json={"name": "DefP"}, timeout=15)
+    assert r.status_code == 200
+    assert r.json()["state"]["difficulty"] == "alta"

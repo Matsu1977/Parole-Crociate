@@ -42,7 +42,8 @@ export default function Game() {
         setDirection(first.direction);
       }
     } catch (e) {
-      /* not ready yet */
+      // puzzle not ready yet (backend returns 425 during generation)
+      console.debug("Cruciverba non ancora pronto", e?.response?.status);
     } finally {
       fetchingRef.current = false;
     }
@@ -158,7 +159,8 @@ export default function Game() {
         setPlayers(st.players || []);
         setStatus(st.status);
       } catch (e) {
-        /* ignore transient */
+        // transient network/polling error; will retry on next interval
+        console.debug("Polling stato non riuscito, riprovo", e?.message);
       }
     };
     poll();

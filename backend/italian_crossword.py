@@ -17,7 +17,7 @@ except AttributeError:  # py<3.10
         return bin(x).count("1")
 
 
-def _load():
+def _load() -> None:
     global _WORDS, _MASK, _FULL
     if _WORDS is not None:
         return
@@ -39,7 +39,7 @@ def _load():
         _MASK[L] = m
 
 
-def _runs_ok(R, C, blocked, min_run=3, max_run=13):
+def _runs_ok(R: int, C: int, blocked: set, min_run: int = 3, max_run: int = 13) -> bool:
     def check(cells):
         run = 0
         for cell in cells:
@@ -64,7 +64,7 @@ def _runs_ok(R, C, blocked, min_run=3, max_run=13):
     return True
 
 
-def _connected(R, C, blocked):
+def _connected(R: int, C: int, blocked: set) -> bool:
     whites = [(r, c) for r in range(R) for c in range(C) if (r, c) not in blocked]
     if not whites:
         return False
@@ -127,7 +127,7 @@ def _long_runs(R, C, blocked, max_run):
     return runs
 
 
-def gen_pattern(R, C, density=0.16, min_run=4, max_run=9, restarts=3000):
+def gen_pattern(R: int, C: int, density: float = 0.16, min_run: int = 4, max_run: int = 9, restarts: int = 3000) -> set | None:
     for _ in range(restarts):
         blocked = set()
         ok = True
@@ -160,7 +160,7 @@ def gen_pattern(R, C, density=0.16, min_run=4, max_run=9, restarts=3000):
     return None
 
 
-def get_slots(R, C, blocked):
+def get_slots(R: int, C: int, blocked: set) -> list:
     slots = []
     for r in range(R):
         c = 0
@@ -264,7 +264,7 @@ def _attempt(slots, neighbors, lens, masks, node_limit):
     return dict(filled) if r is True else None
 
 
-def solve(slots, time_budget=6.0):
+def solve(slots: list, time_budget: float = 6.0) -> dict | None:
     across_at, down_at = {}, {}
     for i, s in enumerate(slots):
         store = across_at if s["dir"] == "across" else down_at
@@ -326,7 +326,7 @@ def _assemble(R, C, blocked, slots, filled):
     return {"rows": R, "cols": C, "cells": cells, "across": across, "down": down, "solution": solution}
 
 
-def build_italian_crossword(R=13, C=13, total_budget=45.0, per_solve=3.0, min_run=3, max_run=8):
+def build_italian_crossword(R: int = 13, C: int = 13, total_budget: float = 45.0, per_solve: float = 3.0, min_run: int = 3, max_run: int = 8) -> dict | None:
     _load()
     deadline = time.time() + total_budget
     while time.time() < deadline:

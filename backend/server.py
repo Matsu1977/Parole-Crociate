@@ -5,7 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import json
 import logging
-import random
+import secrets
 import string
 import uuid
 import asyncio
@@ -32,12 +32,12 @@ logger = logging.getLogger(__name__)
 PLAYER_COLORS = ["#354A5F", "#C05C48"]
 
 
-def now_iso():
+def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def gen_code():
-    return "".join(random.choice(string.ascii_uppercase) for _ in range(4))
+def gen_code() -> str:
+    return "".join(secrets.choice(string.ascii_uppercase) for _ in range(4))
 
 
 # ---------- Puzzle generation ----------

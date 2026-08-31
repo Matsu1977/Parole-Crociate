@@ -121,7 +121,7 @@ FALLBACK_POOL = [
 ]
 
 
-def normalize_word(w):
+def normalize_word(w: str) -> str:
     w = (w or "").strip().upper()
     w = "".join(c for c in unicodedata.normalize("NFD", w) if unicodedata.category(c) != "Mn")
     w = "".join(c for c in w if "A" <= c <= "Z")
@@ -211,7 +211,7 @@ def _attempt(items, max_words):
     return grid, placements
 
 
-def build_crossword(entries, max_words=70, attempts=12):
+def build_crossword(entries: list, max_words: int = 70, attempts: int = 12) -> dict | None:
     """entries: list of {word, clue}. Returns puzzle dict or None."""
     seen = set()
     items = []
@@ -297,7 +297,7 @@ def build_crossword(entries, max_words=70, attempts=12):
     return {"size": size, "cells": cells, "across": across, "down": down, "solution": solution}
 
 
-def build_from_fallback(n=90):
+def build_from_fallback(n: int = 90) -> dict | None:
     pool = FALLBACK_POOL[:]
     random.shuffle(pool)
     n = min(n, len(pool))
