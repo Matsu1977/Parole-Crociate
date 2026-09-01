@@ -70,6 +70,7 @@ def load_clues():
         logger.info("Loaded %s local crossword definitions", len(_CLUES))
     return _CLUES
 
+
 async def make_puzzle(difficulty="alta"):
     loop = asyncio.get_event_loop()
     puz = None
@@ -328,3 +329,4 @@ app.add_middleware(
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+    
