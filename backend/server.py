@@ -1,7 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import json
 import logging
@@ -19,9 +18,9 @@ from italian_crossword import build_italian_crossword
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
-mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ["DB_NAME"]]
+# Le stanze vivono solo in RAM: niente database esterno.
+# Si azzerano a ogni riavvio del server, va benissimo per un gioco cosi'.
+ROOMS: dict = {}
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -89,16 +88,16 @@ async def make_puzzle(difficulty="alta"):
 
 
 async def generate_and_store(code):
-    room = await db.rooms.find_one({"code": code})
+    room = ROOMS.get(code)
     difficulty = (room or {}).get("difficulty", "alta")
     try:
         puzzle = await make_puzzle(difficulty)
     except Exception as e:
         logger.error(f"generation failed for {code}: {e}")
         puzzle = build_from_fallback()
-    await db.rooms.update_one(
-        {"code": code}, {"$set": {"puzzle": puzzle, "status": "playing"}}
-    )
+    if room is not None:
+        room["puzzle"] = puzzle
+        room["status"] = "playing"
 
 
 def public_puzzle(puzzle):
@@ -173,7 +172,7 @@ async def create_room(body: CreateBody):
         raise HTTPException(400, "Nome richiesto")
     difficulty = body.difficulty if body.difficulty in DIFFICULTY_PROMPTS else "alta"
     code = gen_code()
-    while await db.rooms.find_one({"code": code}):
+    while code in ROOMS:
         code = gen_code()
     player = {
         "id": str(uuid.uuid4()),
@@ -192,7 +191,7 @@ async def create_room(body: CreateBody):
         "difficulty": difficulty,
         "created_at": now_iso(),
     }
-    await db.rooms.insert_one(room)
+    ROOMS[code] = room
     asyncio.create_task(generate_and_store(code))
     return {"player": player, "state": room_state(room)}
 
@@ -201,14 +200,13 @@ async def create_room(body: CreateBody):
 async def join_room(code: str, body: JoinBody):
     code = code.upper().strip()
     name = body.name.strip()
-    room = await db.rooms.find_one({"code": code})
+    room = ROOMS.get(code)
     if not room:
         raise HTTPException(404, "Stanza non trovata")
     players = room.get("players", [])
     existing = next((p for p in players if p["name"].lower() == name.lower()), None)
     if existing:
         existing["last_seen"] = now_iso()
-        await db.rooms.update_one({"code": code}, {"$set": {"players": players}})
         return {"player": existing, "state": room_state(room)}
     if len(players) >= 2:
         raise HTTPException(403, "La stanza e' gia' al completo")
@@ -222,7 +220,6 @@ async def join_room(code: str, body: JoinBody):
         "focus": None,
     }
     players.append(player)
-    await db.rooms.update_one({"code": code}, {"$set": {"players": players}})
     room["players"] = players
     return {"player": player, "state": room_state(room)}
 
@@ -230,7 +227,7 @@ async def join_room(code: str, body: JoinBody):
 @api_router.get("/rooms/{code}/puzzle")
 async def get_puzzle(code: str):
     code = code.upper().strip()
-    room = await db.rooms.find_one({"code": code})
+    room = ROOMS.get(code)
     if not room:
         raise HTTPException(404, "Stanza non trovata")
     if not room.get("puzzle"):
@@ -241,7 +238,7 @@ async def get_puzzle(code: str):
 @api_router.get("/rooms/{code}/state")
 async def get_state(code: str, player_id: str = ""):
     code = code.upper().strip()
-    room = await db.rooms.find_one({"code": code})
+    room = ROOMS.get(code)
     if not room:
         raise HTTPException(404, "Stanza non trovata")
     if player_id:
@@ -249,7 +246,6 @@ async def get_state(code: str, player_id: str = ""):
         for p in players:
             if p["id"] == player_id:
                 p["last_seen"] = now_iso()
-        await db.rooms.update_one({"code": code}, {"$set": {"players": players}})
         room["players"] = players
     return room_state(room, player_id)
 
@@ -257,7 +253,7 @@ async def get_state(code: str, player_id: str = ""):
 @api_router.post("/rooms/{code}/cell")
 async def set_cell(code: str, body: CellBody):
     code = code.upper().strip()
-    room = await db.rooms.find_one({"code": code})
+    room = ROOMS.get(code)
     if not room:
         raise HTTPException(404, "Stanza non trovata")
     if not room.get("puzzle"):
@@ -273,23 +269,22 @@ async def set_cell(code: str, body: CellBody):
     else:
         entries.pop(key, None)
 
-    status = room.get("status", "playing")
+    old_status = room.get("status", "playing")
+    status = old_status
     if all(entries.get(k, {}).get("letter") == v for k, v in solution.items()):
         status = "completed"
 
-    update = {"entries": entries, "status": status}
-    if status == "completed" and room.get("status") != "completed":
-        update["completed_at"] = now_iso()
-    await db.rooms.update_one({"code": code}, {"$set": update})
     room["entries"] = entries
     room["status"] = status
+    if status == "completed" and old_status != "completed":
+        room["completed_at"] = now_iso()
     return room_state(room)
 
 
 @api_router.post("/rooms/{code}/focus")
 async def set_focus(code: str, body: FocusBody):
     code = code.upper().strip()
-    room = await db.rooms.find_one({"code": code})
+    room = ROOMS.get(code)
     if not room:
         raise HTTPException(404, "Stanza non trovata")
     players = room.get("players", [])
@@ -297,36 +292,13 @@ async def set_focus(code: str, body: FocusBody):
         if p["id"] == body.player_id:
             p["focus"] = {"row": body.row, "col": body.col, "direction": body.direction}
             p["last_seen"] = now_iso()
-    await db.rooms.update_one({"code": code}, {"$set": {"players": players}})
     return {"ok": True}
 
 
 @api_router.post("/rooms/{code}/new")
 async def new_puzzle(code: str):
     code = code.upper().strip()
-    room = await db.rooms.find_one({"code": code})
+    room = ROOMS.get(code)
     if not room:
-        raise HTTPException(404, "Stanza non trovata")
-    await db.rooms.update_one(
-        {"code": code},
-        {"$set": {"puzzle": None, "entries": {}, "status": "generating", "created_at": now_iso()}},
-    )
-    asyncio.create_task(generate_and_store(code))
-    return {"status": "generating"}
-
-
-app.include_router(api_router)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+        raise
     
