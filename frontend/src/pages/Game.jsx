@@ -180,7 +180,7 @@ export default function Game() {
       stop = true;
       clearInterval(id);
     };
-  }, [player, code]);
+  }, [player, code, loadPuzzle]);
 
   // ---- presence ----
   useEffect(() => {
