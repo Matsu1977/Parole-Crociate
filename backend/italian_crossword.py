@@ -9,6 +9,9 @@ _WORDS = None   # {L: [word,...]}
 _MASK = None    # {L: {(pos,ch): int_bitmask}}
 _FULL = None    # {L: int full mask}
 _CAP = 200000
+_DIFFICULTY = None  # {word: tier}
+_TIER_ORDER = ["facilissima", "facile", "media", "alta", "altissima"]
+_TIER_CACHE = {}  # difficulty -> (words_by_len, mask_by_len, full_by_len)
 
 try:
     _popcount = int.bit_count
@@ -18,7 +21,7 @@ except AttributeError:  # py<3.10
 
 
 def _load() -> None:
-    global _WORDS, _MASK, _FULL
+    global _WORDS, _MASK, _FULL, _DIFFICULTY
     if _WORDS is not None:
         return
     with open(os.path.join(ROOT, "data", "words_by_len.json")) as f:
@@ -37,6 +40,47 @@ def _load() -> None:
                 key = (pos, ch)
                 m[key] = m.get(key, 0) | bit
         _MASK[L] = m
+
+    diff_path = os.path.join(ROOT, "data", "word_difficulty.json")
+    if os.path.exists(diff_path):
+        with open(diff_path, encoding="utf-8") as f:
+            _DIFFICULTY = json.load(f)
+    else:
+        _DIFFICULTY = {}
+
+
+def _pool_for_difficulty(difficulty: str):
+    """Return (words_by_len, mask_by_len, full_by_len) restricted to words whose
+    tier is at or below the requested difficulty (cumulative: 'facile' includes
+    'facilissima' too, so the pool stays large enough to actually fill a grid)."""
+    if difficulty not in _TIER_ORDER:
+        difficulty = "alta"
+    if difficulty == "altissima" or not _DIFFICULTY:
+        return _WORDS, _MASK, _FULL
+    if difficulty in _TIER_CACHE:
+        return _TIER_CACHE[difficulty]
+
+    tier_idx = _TIER_ORDER.index(difficulty)
+    allowed_tiers = set(_TIER_ORDER[: tier_idx + 1])
+
+    words_by_len, mask_by_len, full_by_len = {}, {}, {}
+    for L, lst in _WORDS.items():
+        filtered = [w for w in lst if _DIFFICULTY.get(w, "altissima") in allowed_tiers]
+        if not filtered:
+            continue
+        words_by_len[L] = filtered
+        full_by_len[L] = (1 << len(filtered)) - 1
+        m = {}
+        for i, w in enumerate(filtered):
+            bit = 1 << i
+            for pos, ch in enumerate(w):
+                key = (pos, ch)
+                m[key] = m.get(key, 0) | bit
+        mask_by_len[L] = m
+
+    result = (words_by_len, mask_by_len, full_by_len)
+    _TIER_CACHE[difficulty] = result
+    return result
 
 
 def _runs_ok(R: int, C: int, blocked: set, min_run: int = 3, max_run: int = 13) -> bool:
@@ -127,7 +171,7 @@ def _long_runs(R, C, blocked, max_run):
     return runs
 
 
-def gen_pattern(R: int, C: int, density: float = 0.16, min_run: int = 4, max_run: int = 9, restarts: int = 3000) -> set | None:
+def gen_pattern(R: int, C: int, density: float = 0.12, min_run: int = 4, max_run: int = 9, restarts: int = 3000) -> set | None:
     for _ in range(restarts):
         blocked = set()
         ok = True
@@ -197,9 +241,11 @@ def _bits(x):
 _ALPHA = [chr(c) for c in range(65, 91)]
 
 
-def _attempt(slots, neighbors, lens, masks, node_limit):
+def _attempt(slots, neighbors, lens, masks, node_limit, words_by_len=None, full_by_len=None):
+    words_by_len = words_by_len if words_by_len is not None else _WORDS
+    full_by_len = full_by_len if full_by_len is not None else _FULL
     n = len(slots)
-    domains = [_FULL[L] for L in lens]
+    domains = [full_by_len[L] for L in lens]
     filled = {}
     used = set()
     nodes = [0]
@@ -224,7 +270,7 @@ def _attempt(slots, neighbors, lens, masks, node_limit):
                     break
         if best == -1:
             return True
-        words = _WORDS[lens[best]]
+        words = words_by_len[lens[best]]
         ids = list(_bits(domains[best]))
         random.shuffle(ids)
         nb = neighbors[best]
@@ -264,7 +310,10 @@ def _attempt(slots, neighbors, lens, masks, node_limit):
     return dict(filled) if r is True else None
 
 
-def solve(slots: list, time_budget: float = 6.0) -> dict | None:
+def solve(slots: list, time_budget: float = 6.0, words_by_len=None, mask_by_len=None, full_by_len=None) -> dict | None:
+    words_by_len = words_by_len if words_by_len is not None else _WORDS
+    mask_by_len = mask_by_len if mask_by_len is not None else _MASK
+    full_by_len = full_by_len if full_by_len is not None else _FULL
     across_at, down_at = {}, {}
     for i, s in enumerate(slots):
         store = across_at if s["dir"] == "across" else down_at
@@ -275,12 +324,12 @@ def solve(slots: list, time_budget: float = 6.0) -> dict | None:
         perp = down_at if s["dir"] == "across" else across_at
         neighbors.append([(pos_i, *perp[cell]) for pos_i, cell in enumerate(s["cells"]) if cell in perp])
     lens = [s["len"] for s in slots]
-    masks = [_MASK[L] for L in lens]
+    masks = [mask_by_len[L] for L in lens]
 
     deadline = time.time() + time_budget
     node_limit = 6000
     while time.time() < deadline:
-        res = _attempt(slots, neighbors, lens, masks, node_limit)
+        res = _attempt(slots, neighbors, lens, masks, node_limit, words_by_len, full_by_len)
         if res is not None:
             return res
     return None
@@ -326,17 +375,36 @@ def _assemble(R, C, blocked, slots, filled):
     return {"rows": R, "cols": C, "cells": cells, "across": across, "down": down, "solution": solution}
 
 
-def build_italian_crossword(R: int = 13, C: int = 13, total_budget: float = 45.0, per_solve: float = 3.0, min_run: int = 3, max_run: int = 8) -> dict | None:
+_GRID_SIZE_BY_DIFFICULTY = {
+    "facilissima": 9,
+    "facile": 11,
+    "media": 13,
+    "alta": 13,
+    "altissima": 13,
+}
+
+
+def build_italian_crossword(R: int = None, C: int = None, total_budget: float = 45.0, per_solve: float = 3.0, min_run: int = 3, max_run: int = 8, difficulty: str = "alta") -> dict | None:
     _load()
+    size = _GRID_SIZE_BY_DIFFICULTY.get(difficulty, 13)
+    R = R or size
+    C = C or size
+    words_by_len, mask_by_len, full_by_len = _pool_for_difficulty(difficulty)
     deadline = time.time() + total_budget
     while time.time() < deadline:
         blocked = gen_pattern(R, C, min_run=min_run, max_run=max_run)
         if not blocked:
             continue
         slots = get_slots(R, C, blocked)
-        if any(s["len"] not in _WORDS for s in slots):
+        if any(s["len"] not in words_by_len for s in slots):
             continue
-        filled = solve(slots, time_budget=min(per_solve, deadline - time.time()))
+        filled = solve(
+            slots,
+            time_budget=min(per_solve, deadline - time.time()),
+            words_by_len=words_by_len,
+            mask_by_len=mask_by_len,
+            full_by_len=full_by_len,
+        )
         if filled is not None:
             return _assemble(R, C, blocked, slots, filled)
     return None

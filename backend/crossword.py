@@ -1,5 +1,7 @@
 import unicodedata
 import random
+import json
+import os
 
 # High-difficulty Italian fallback word pool (word + elegant/hard clue)
 FALLBACK_POOL = [
@@ -258,16 +260,8 @@ def build_crossword(entries: list, max_words: int = 70, attempts: int = 12) -> d
     W = max(c for (r, c) in ngrid) + 1
     size = max(H, W)
 
-    number_at = {}
-    num = 1
-    for r in range(size):
-        for c in range(size):
-            if (r, c) in ngrid:
-                starts_across = ((r, c - 1) not in ngrid) and ((r, c + 1) in ngrid)
-                starts_down = ((r - 1, c) not in ngrid) and ((r + 1, c) in ngrid)
-                if starts_across or starts_down:
-                    number_at[(r, c)] = num
-                    num += 1
+    start_positions = sorted({(p["r"], p["c"]) for p in placements})
+    number_at = {pos: i + 1 for i, pos in enumerate(start_positions)}
 
     across, down = [], []
     for p in placements:
@@ -307,3 +301,46 @@ def build_from_fallback(n: int = 90) -> dict | None:
             return puz
         random.shuffle(pool)
     return build_crossword(FALLBACK_POOL, max_words=70, attempts=6)
+
+
+# ---------- Pool reale (14000+ definizioni), filtrato per difficolta' ----------
+_TIER_ORDER = ["facilissima", "facile", "media", "alta", "altissima"]
+_CLUES_POOL = None      # {word: clue}
+_DIFFICULTY_POOL = None  # {word: tier}
+
+
+def _load_pool_data():
+    global _CLUES_POOL, _DIFFICULTY_POOL
+    if _CLUES_POOL is None:
+        root = os.path.dirname(__file__)
+        with open(os.path.join(root, "data", "clues_by_word.json"), encoding="utf-8") as f:
+            _CLUES_POOL = json.load(f)
+        with open(os.path.join(root, "data", "word_difficulty.json"), encoding="utf-8") as f:
+            _DIFFICULTY_POOL = json.load(f)
+
+
+def load_pool(difficulty: str = "alta", limit: int = 260) -> list:
+    """Entries {word, clue} per la difficolta' scelta (cumulativa: include anche i
+    livelli piu' facili, cosi' il pool e' sempre abbastanza ricco per riempire uno schema)."""
+    _load_pool_data()
+    tier_idx = _TIER_ORDER.index(difficulty) if difficulty in _TIER_ORDER else len(_TIER_ORDER) - 1
+    allowed_tiers = set(_TIER_ORDER[: tier_idx + 1])
+    candidates = [
+        {"word": w, "clue": c}
+        for w, c in _CLUES_POOL.items()
+        if 3 <= len(w) <= 11 and _DIFFICULTY_POOL.get(w, "altissima") in allowed_tiers
+    ]
+    random.shuffle(candidates)
+    return candidates[:limit]
+
+
+def build_from_pool(difficulty: str = "alta") -> dict | None:
+    entries = load_pool(difficulty)
+    if len(entries) < 15:
+        return build_from_fallback()
+    for _ in range(3):
+        puz = build_crossword(entries, max_words=90, attempts=15)
+        if puz:
+            return puz
+        entries = load_pool(difficulty)
+    return build_from_fallback()

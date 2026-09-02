@@ -12,7 +12,7 @@ from pathlib import Path
 from pydantic import BaseModel
 from datetime import datetime, timezone
 
-from crossword import build_crossword, build_from_fallback, FALLBACK_POOL
+from crossword import build_crossword, build_from_fallback, build_from_pool, FALLBACK_POOL
 from italian_crossword import build_italian_crossword
 
 ROOT_DIR = Path(__file__).parent
@@ -41,6 +41,8 @@ def gen_code() -> str:
 
 # ---------- Puzzle generation ----------
 DIFFICULTY_PROMPTS = {
+    "facilissima": "di difficolta' FACILISSIMA: solo parole molto comuni, griglia piccola",
+    "facile": "di difficolta' FACILE: parole comuni, griglia ridotta",
     "media": (
         "di difficolta' MEDIA: definizioni chiare, dirette e comprensibili, "
         "con qualche piccola sfida ma senza tranelli"
@@ -72,9 +74,19 @@ def load_clues():
 
 async def make_puzzle(difficulty="alta"):
     loop = asyncio.get_event_loop()
+
+    if difficulty in ("facilissima", "facile"):
+        # Per questi livelli le parole comuni disponibili sono troppo poche per
+        # riempire in modo affidabile uno schema classico simmetrico: usiamo il
+        # generatore libero (comunque con le definizioni vere, filtrate per difficolta').
+        puz = await loop.run_in_executor(None, lambda: build_from_pool(difficulty))
+        if puz:
+            return puz
+        return build_from_fallback()
+
     puz = None
     for _ in range(2):
-        puz = await loop.run_in_executor(None, build_italian_crossword)
+        puz = await loop.run_in_executor(None, lambda: build_italian_crossword(difficulty=difficulty))
         if puz:
             break
     if not puz:
@@ -318,4 +330,3 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-    

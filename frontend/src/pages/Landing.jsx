@@ -140,6 +140,8 @@ export default function Landing() {
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {[
+                    { k: "facilissima", label: "Facilissima", desc: "Per iniziare" },
+                    { k: "facile", label: "Facile", desc: "Parole comuni" },
                     { k: "media", label: "Media", desc: "Accessibile" },
                     { k: "alta", label: "Alta", desc: "Ricercata" },
                     { k: "altissima", label: "Altissima", desc: "Criptica" },
