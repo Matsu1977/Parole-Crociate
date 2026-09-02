@@ -300,5 +300,22 @@ async def new_puzzle(code: str):
     code = code.upper().strip()
     room = ROOMS.get(code)
     if not room:
-        raise
+        raise HTTPException(404, "Stanza non trovata")
+    room["puzzle"] = None
+    room["entries"] = {}
+    room["status"] = "generating"
+    room["created_at"] = now_iso()
+    asyncio.create_task(generate_and_store(code))
+    return {"status": "generating"}
+
+
+app.include_router(api_router)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
     
