@@ -75,7 +75,7 @@ def load_clues():
 async def make_puzzle(difficulty="alta"):
     loop = asyncio.get_event_loop()
 
-    if difficulty in ("facilissima", "facile"):
+    if difficulty in ("facilissima", "facile", "media"):
         # Per questi livelli le parole comuni disponibili sono troppo poche per
         # riempire in modo affidabile uno schema classico simmetrico: usiamo il
         # generatore libero (comunque con le definizioni vere, filtrate per difficolta').
