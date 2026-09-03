@@ -84,11 +84,7 @@ async def make_puzzle(difficulty="alta"):
             return puz
         return build_from_fallback()
 
-    puz = None
-    for _ in range(2):
-        puz = await loop.run_in_executor(None, lambda: build_italian_crossword(difficulty=difficulty))
-        if puz:
-            break
+    puz = await loop.run_in_executor(None, lambda: build_italian_crossword(difficulty=difficulty))
     if not puz:
         logger.error("classic crossword build failed; using sparse fallback")
         return build_from_fallback()

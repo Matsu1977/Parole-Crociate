@@ -384,7 +384,7 @@ _GRID_SIZE_BY_DIFFICULTY = {
 }
 
 
-def build_italian_crossword(R: int = None, C: int = None, total_budget: float = 45.0, per_solve: float = 3.0, min_run: int = 3, max_run: int = 8, difficulty: str = "alta") -> dict | None:
+def build_italian_crossword(R: int = None, C: int = None, total_budget: float = 90.0, per_solve: float = 3.0, min_run: int = 3, max_run: int = 8, difficulty: str = "alta") -> dict | None:
     _load()
     size = _GRID_SIZE_BY_DIFFICULTY.get(difficulty, 13)
     R = R or size
