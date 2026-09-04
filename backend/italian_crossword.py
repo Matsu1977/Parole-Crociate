@@ -5,13 +5,15 @@ import time
 
 ROOT = os.path.dirname(__file__)
 
-_WORDS = None   # {L: [word,...]}
+_WORDS = None   # {L: [word,...]}  ordered: words WITH a real definition come first
 _MASK = None    # {L: {(pos,ch): int_bitmask}}
 _FULL = None    # {L: int full mask}
+_DEFINED_COUNT = None  # {L: how many of _WORDS[L] have a real definition}
+_CLUES_SET = None  # set of words that have a real definition
 _CAP = 200000
 _DIFFICULTY = None  # {word: tier}
 _TIER_ORDER = ["facilissima", "facile", "media", "alta", "altissima"]
-_TIER_CACHE = {}  # difficulty -> (words_by_len, mask_by_len, full_by_len)
+_TIER_CACHE = {}  # difficulty -> (words_by_len, mask_by_len, full_by_len, defined_count_by_len)
 
 try:
     _popcount = int.bit_count
@@ -20,26 +22,48 @@ except AttributeError:  # py<3.10
         return bin(x).count("1")
 
 
+def _build_tables(lst: list) -> tuple:
+    """Given a word list (already ordered defined-words-first), build the
+    (mask, full) lookup tables used by the solver."""
+    full = (1 << len(lst)) - 1
+    m = {}
+    for i, w in enumerate(lst):
+        bit = 1 << i
+        for pos, ch in enumerate(w):
+            key = (pos, ch)
+            m[key] = m.get(key, 0) | bit
+    return m, full
+
+
 def _load() -> None:
-    global _WORDS, _MASK, _FULL, _DIFFICULTY
+    global _WORDS, _MASK, _FULL, _DIFFICULTY, _DEFINED_COUNT, _CLUES_SET
     if _WORDS is not None:
         return
     with open(os.path.join(ROOT, "data", "words_by_len.json")) as f:
         raw = json.load(f)
-    _WORDS, _MASK, _FULL = {}, {}, {}
+
+    clues_path = os.path.join(ROOT, "data", "clues_by_word.json")
+    if os.path.exists(clues_path):
+        with open(clues_path, encoding="utf-8") as f:
+            _CLUES_SET = set(json.load(f).keys())
+    else:
+        _CLUES_SET = set()
+
+    _WORDS, _MASK, _FULL, _DEFINED_COUNT = {}, {}, {}, {}
     for k, lst in raw.items():
         L = int(k)
-        if len(lst) > _CAP:
-            lst = random.sample(lst, _CAP)
-        _WORDS[L] = lst
-        _FULL[L] = (1 << len(lst)) - 1
-        m = {}
-        for i, w in enumerate(lst):
-            bit = 1 << i
-            for pos, ch in enumerate(w):
-                key = (pos, ch)
-                m[key] = m.get(key, 0) | bit
-        _MASK[L] = m
+        defined = [w for w in lst if w in _CLUES_SET]
+        undefined = [w for w in lst if w not in _CLUES_SET]
+        if len(undefined) > _CAP:
+            undefined = random.sample(undefined, _CAP)
+        # Le parole con una definizione vera vengono provate per prime dal
+        # risolutore (vedi _attempt): meno "Definizione non disponibile" nel
+        # cruciverba finale, senza perdere la possibilita' di completare lo
+        # schema quando servono anche le altre.
+        ordered = defined + undefined
+        _WORDS[L] = ordered
+        _DEFINED_COUNT[L] = len(defined)
+        _MASK[L], _FULL[L] = _build_tables(ordered)
 
     diff_path = os.path.join(ROOT, "data", "word_difficulty.json")
     if os.path.exists(diff_path):
@@ -50,35 +74,30 @@ def _load() -> None:
 
 
 def _pool_for_difficulty(difficulty: str):
-    """Return (words_by_len, mask_by_len, full_by_len) restricted to words whose
-    tier is at or below the requested difficulty (cumulative: 'facile' includes
-    'facilissima' too, so the pool stays large enough to actually fill a grid)."""
+    """Return (words_by_len, mask_by_len, full_by_len, defined_count_by_len) restricted
+    to words whose tier is at or below the requested difficulty (cumulative: 'facile'
+    includes 'facilissima' too, so the pool stays large enough to actually fill a grid)."""
     if difficulty not in _TIER_ORDER:
         difficulty = "alta"
     if difficulty == "altissima" or not _DIFFICULTY:
-        return _WORDS, _MASK, _FULL
+        return _WORDS, _MASK, _FULL, _DEFINED_COUNT
     if difficulty in _TIER_CACHE:
         return _TIER_CACHE[difficulty]
 
     tier_idx = _TIER_ORDER.index(difficulty)
     allowed_tiers = set(_TIER_ORDER[: tier_idx + 1])
 
-    words_by_len, mask_by_len, full_by_len = {}, {}, {}
+    words_by_len, mask_by_len, full_by_len, defined_count_by_len = {}, {}, {}, {}
     for L, lst in _WORDS.items():
+        # _WORDS[L] is already ordered defined-first, so a simple filter keeps that order.
         filtered = [w for w in lst if _DIFFICULTY.get(w, "altissima") in allowed_tiers]
         if not filtered:
             continue
         words_by_len[L] = filtered
-        full_by_len[L] = (1 << len(filtered)) - 1
-        m = {}
-        for i, w in enumerate(filtered):
-            bit = 1 << i
-            for pos, ch in enumerate(w):
-                key = (pos, ch)
-                m[key] = m.get(key, 0) | bit
-        mask_by_len[L] = m
+        defined_count_by_len[L] = sum(1 for w in filtered if w in _CLUES_SET)
+        mask_by_len[L], full_by_len[L] = _build_tables(filtered)
 
-    result = (words_by_len, mask_by_len, full_by_len)
+    result = (words_by_len, mask_by_len, full_by_len, defined_count_by_len)
     _TIER_CACHE[difficulty] = result
     return result
 
@@ -241,7 +260,7 @@ def _bits(x):
 _ALPHA = [chr(c) for c in range(65, 91)]
 
 
-def _attempt(slots, neighbors, lens, masks, node_limit, words_by_len=None, full_by_len=None):
+def _attempt(slots, neighbors, lens, masks, node_limit, words_by_len=None, full_by_len=None, defined_counts=None):
     words_by_len = words_by_len if words_by_len is not None else _WORDS
     full_by_len = full_by_len if full_by_len is not None else _FULL
     n = len(slots)
@@ -271,8 +290,15 @@ def _attempt(slots, neighbors, lens, masks, node_limit, words_by_len=None, full_
         if best == -1:
             return True
         words = words_by_len[lens[best]]
+        dcount = defined_counts[best] if defined_counts else 0
         ids = list(_bits(domains[best]))
-        random.shuffle(ids)
+        defined_ids = [i for i in ids if i < dcount]
+        other_ids = [i for i in ids if i >= dcount]
+        random.shuffle(defined_ids)
+        random.shuffle(other_ids)
+        # Prova prima le parole con una definizione vera: se lo schema si puo'
+        # completare comunque, il cruciverba finale ne avra' molte di piu'.
+        ids = defined_ids + other_ids
         nb = neighbors[best]
         for cid in ids:
             w = words[cid]
@@ -310,10 +336,11 @@ def _attempt(slots, neighbors, lens, masks, node_limit, words_by_len=None, full_
     return dict(filled) if r is True else None
 
 
-def solve(slots: list, time_budget: float = 6.0, words_by_len=None, mask_by_len=None, full_by_len=None) -> dict | None:
+def solve(slots: list, time_budget: float = 6.0, words_by_len=None, mask_by_len=None, full_by_len=None, defined_count_by_len=None) -> dict | None:
     words_by_len = words_by_len if words_by_len is not None else _WORDS
     mask_by_len = mask_by_len if mask_by_len is not None else _MASK
     full_by_len = full_by_len if full_by_len is not None else _FULL
+    defined_count_by_len = defined_count_by_len if defined_count_by_len is not None else _DEFINED_COUNT
     across_at, down_at = {}, {}
     for i, s in enumerate(slots):
         store = across_at if s["dir"] == "across" else down_at
@@ -325,11 +352,12 @@ def solve(slots: list, time_budget: float = 6.0, words_by_len=None, mask_by_len=
         neighbors.append([(pos_i, *perp[cell]) for pos_i, cell in enumerate(s["cells"]) if cell in perp])
     lens = [s["len"] for s in slots]
     masks = [mask_by_len[L] for L in lens]
+    defined_counts = [(defined_count_by_len or {}).get(L, 0) for L in lens]
 
     deadline = time.time() + time_budget
     node_limit = 6000
     while time.time() < deadline:
-        res = _attempt(slots, neighbors, lens, masks, node_limit, words_by_len, full_by_len)
+        res = _attempt(slots, neighbors, lens, masks, node_limit, words_by_len, full_by_len, defined_counts)
         if res is not None:
             return res
     return None
@@ -389,7 +417,7 @@ def build_italian_crossword(R: int = None, C: int = None, total_budget: float = 
     size = _GRID_SIZE_BY_DIFFICULTY.get(difficulty, 13)
     R = R or size
     C = C or size
-    words_by_len, mask_by_len, full_by_len = _pool_for_difficulty(difficulty)
+    words_by_len, mask_by_len, full_by_len, defined_count_by_len = _pool_for_difficulty(difficulty)
     deadline = time.time() + total_budget
     while time.time() < deadline:
         blocked = gen_pattern(R, C, min_run=min_run, max_run=max_run)
@@ -404,6 +432,7 @@ def build_italian_crossword(R: int = None, C: int = None, total_budget: float = 
             words_by_len=words_by_len,
             mask_by_len=mask_by_len,
             full_by_len=full_by_len,
+            defined_count_by_len=defined_count_by_len,
         )
         if filled is not None:
             return _assemble(R, C, blocked, slots, filled)
